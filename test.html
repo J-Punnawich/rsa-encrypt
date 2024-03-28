@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+   <meta charset="UTF-8">
+   <title>Secure Data Submission</title>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js" crossorigin="anonymous"
+      referrerpolicy="no-referrer"></script>
+   <script src="https://cdn.jsdelivr.net/npm/jsencrypt@3.x.x/dist/jsencrypt.min.js"></script>
+
+</head>
+
+<body>
+   <h1>Send Encrypted Data</h1>
+   <textarea id="dataToEncrypt" rows="10"></textarea>
+   <button onclick="encryptAndSendData()">Submit Encrypted</button>
+
+   <script>
+      const serverPublicKeyPEM = "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCnbVvRBSOxkzx6Re5GubrKzdwyInjW1S3IqaeFq5vCuLmhYSGvpvx28TQ4XVLJduro17SDXLRgLfvRP12wwImjCe05OTZfBAmsX4zj8U4uAJ8AzaDrCrRqb+/q6Ppu7aO7Alw95RvA/xXXBjXuTlYgfq1aM75ILWPTn6DHOkTToQIDAQAB"; // Replace with actual server public key
+
+      async function encryptAndSendData() {
+         const data = document.getElementById('dataToEncrypt').value;
+
+         async function fetchPublicKey() {
+            const response = await fetch("http://localhost:8000/public-key"); // Assuming your Spring Boot server is running locally
+            const publicKeyPEM = await response.text();
+            return publicKeyPEM;
+         }
+
+         async function getPublicKeyFromPEM(publicKeyPEM) {
+            const binaryDerString = atob(publicKeyPEM.replace(/-----BEGIN PUBLIC KEY-----/, "").replace(/-----END PUBLIC KEY-----/, ""));
+            console.log(binaryDerString)
+            return await binaryDerString
+         }
+
+
+         async function encryptData(dataToEncrypt) {
+            const publicKeyPEM = await fetchPublicKey();
+            const publicKey = await getPublicKeyFromPEM(publicKeyPEM);
+
+            const symmetricKey = CryptoJS.lib.WordArray.random(128 / 8).toString(CryptoJS.enc.Hex);
+
+            // Encrypt data using the symmetric key
+            const encryptedData = CryptoJS.AES.encrypt(dataToEncrypt, symmetricKey).toString();
+
+            return { encryptedData, encryptedSymmetricKey };
+         }
+
+         try {
+            const { encryptedData, encryptedSymmetricKey } = await encryptData(data);
+
+            const response = await fetch('http://localhost:8000/submit-data', {
+               method: 'POST',
+               headers: {
+                  'Content-Type': 'application/json'
+               },
+               body: JSON.stringify({
+                  encryptedData,
+                  encryptedKey: encryptedSymmetricKey
+               })
+            });
+
+            if (!response.ok) {
+               throw new Error(`Error submitting data: ${response.statusText}`);
+            }
+
+            const serverResponse = await response.json();
+            console.log('Server response:', serverResponse);
+            // Provide feedback to the user based on the server response (optional)
+         } catch (error) {
+            console.error('Error encrypting or sending data:', error);
+            // Display user-friendly error message
+         }
+      }
+   </script>
+</body>
+
+</html>
